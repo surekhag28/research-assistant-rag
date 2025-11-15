@@ -1,88 +1,62 @@
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Literal, List, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PROJECT_ROOT = Path(__file__).parent.parent
-ENV_FILE_PATH = PROJECT_ROOT / ".env"
 
-
-class BaseConfigSettings(BaseSettings):
+class DefaultSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
-        extra="ignore",
-        frozen=True,
-        env_file_encoding="__",
-        case_sensitive=False,
+        env_file=".env", extra="ignore", frozen=True, env_nested_delimiter="__"
     )
 
 
-class ArxivSettings(BaseConfigSettings):
-    model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
-        extra="ignore",
-        frozen=True,
-        env_file_encoding="ARXIV__",
-        case_sensitive=False,
-    )
+class PostgresSettings(DefaultSettings):
+    database_url: str = "postgresql://rag_user:rag_password@localhost:5432/rag_db"
+    echo_sql: bool = False
+    pool_size: int = 20
+    max_overflow: int = 0
 
-    base_url: str = "https://export.arxiv.org/api/query"
-    pdf_cache_dir: str = "./data/arxiv_pdfs"
-    rate_limit_delay: float = 3.0
-    timeout_seconds: int = 30
-    max_results: int = 15
-    search_category: str = "cs.AI"
-    download_max_retries: int = 3
-    download_retry_delay_base: float = 5.0
-    max_concurrent_downloads: int = 5
-    max_concurrent_parsing: int = 1
+    class Config:
+        env_prefix = "POSTGRES_"
 
-    namespaces: dict = {
-        "atom": "http://www.w3.org/2005/Atom",
-        "opensearch": "http://a9.com/-/spec/opensearch/1.1/",
-        "arxiv": "http://arxiv.org/schemas/atom",
-    }
 
-    @field_validator("pdf_cache_dir")
+class OpenSearchSettings(DefaultSettings):
+    host: str = "http://localhost:9200"
+
+    class Config:
+        env_prefix = "OPENSEARCH_"
+
+
+class OllamaSettings(DefaultSettings):
+    host: str = "http://localhost:11434"
+    models: Union[str, List[str]] = Field(default=["gpt-oss:20b", "llama3.2:1b"])
+    default_model: str = "llama3.2:1b"
+    timeout: int = 300  # seconds
+
+    @field_validator("models", mode="before")
     @classmethod
-    def validate_cache_dir(cls, v: str) -> str:
-        os.makedirs(v, exist_ok=True)
+    def parse_model(cls, v):
+        if isinstance(v, str):
+            return [model.strip() for model in v.split(",") if model.strip()]
         return v
 
+    class Config:
+        env_prefix = "OLLAMA_"
 
-class Settings(BaseConfigSettings):
+
+class AppSettings(DefaultSettings):
     app_version: str = "0.1.0"
     debug: bool = True
-    envrionment: Literal["development", "staging", "production"] = "development"
+    environment: str = "development"
     service_name: str = "rag-api"
 
-    postgres_database_url: str = (
-        "postgresql://rag_user:rag_password@localhost:5432/rag_db"
-    )
-    postgres_echo_sql: bool = False
-    postgres_pool_size: int = 20
-    postgres_max_overflow: int = 0
-
-    ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:1b"
-    ollama_timeout: int = 300
-
-    # Jina AI embeddings configuration
-    jina_api_key: str = ""
-
-    arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
-
-    @field_validator("postgres_database_url")
-    @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        if not (v.startswith("postgres://") or v.startswith("postgresql+psycopg2://")):
-            raise ValueError(
-                "Database url must start with 'postgres://' or 'postgresql+psycopg2://'"
-            )
-        return v
+    postgres: PostgresSettings = PostgresSettings()
+    opensearch: OpenSearchSettings = OpenSearchSettings()
+    ollama: OllamaSettings = OllamaSettings()
 
 
-def get_settings() -> Settings:
-    return Settings()
+# factory to return settings object
+def get_settings() -> AppSettings:
+    return AppSettings()
