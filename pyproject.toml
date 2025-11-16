@@ -1,27 +1,23 @@
 [project]
 name = "research-assistant"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
+description = "Personal research assistant using RAG"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "alembic>=1.17.1",
-    "docling>=2.61.1",
-    "fastapi>=0.121.1",
-    "gradio>=5.23.1",
-    "httpx>=0.28.1",
-    "ipykernel>=7.1.0",
-    "langfuse>=3.9.1",
+    "fastapi[standard]>=0.115.12",
+    "uvicorn>=0.34.0",
+    "pydantic>=2.11.3",
+    "pydantic-settings>=2.8.1",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.10",
+    "alembic>=1.13.3",
     "opensearch-py>=3.0.0",
-    "psycopg2-binary>=2.9.11",
-    "pydantic>=2.12.4",
+    "requests>=2.32.3",
+    "httpx>=0.28.1",
+    "docling>=2.43.0",
     "python-dateutil>=2.9.0.post0",
-    "redis>=7.0.1",
-    "requests>=2.32.5",
-    "sentence-transformers>=5.1.2",
-    "sqlalchemy>=2.0.44",
-    "uvicorn>=0.38.0",
 ]
+readme = "README.md"
 
 [dependency-groups]
 dev = [
@@ -43,7 +39,6 @@ dev = [
     "types-sqlalchemy>=1.4.53.38",
 ]
 
-
 [tool.ruff]
 line-length = 130
 exclude = ["notebooks/**", ".venv/**"]
@@ -60,3 +55,5 @@ env_files = ".env.test"
 [tool.mypy]
 explicit_package_bases = true
 ignore_errors = true
+
+
