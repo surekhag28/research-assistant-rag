@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from functools import cached_property
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlencode
@@ -199,3 +200,92 @@ class ArxivClient:
         except Exception as e:
             logger.error(f"Failed to fetch papers and metadata from arxiv: {e}")
             raise ArxivAPIException(f"Unexpected error fetching papers from arxiv: {e}")
+
+    def _parse_response(self, xml_data: str) -> List[ArxivPaper]:
+
+        try:
+            root = ET.fromstring(xml_data)
+            entries = root.findall("atom:entry", self.namespaces)
+            papers = []
+
+            for entry in entries:
+                paper = self._parse_single_entry(entry)
+                if paper:
+                    papers.append(paper)
+            return papers
+
+        except ET.ParseError as e:
+            logger.error(f"Failed to parse arxiv XML response: {e}")
+            raise ArxivParseError(f"Failed to parse arxiv XML response: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error parsing arxiv response: {e}")
+            raise ArxivParseError(f"Unexpected error parsing arxiv response: {e}")
+
+    def _parse_single_entry(self, entry: ET.Element) -> Optional[ArxivPaper]:
+
+        try:
+            arxiv_id = self._get_arxiv_id(entry)
+            if not arxiv_id:
+                return None
+
+            title = self._get_text(entry, "atom:title", clean_newlines=True)
+            authors = self._get_authors(entry)
+            abstract = self._get_text(entry, "atom:summary", clean_newlines=True)
+            published = self._get_text(entry, "atom:published")
+            categories = self._get_categories(entry)
+            pdf_url = self._get_pdf_url(entry)
+
+            return ArxivPaper(
+                arxiv_id=arxiv_id,
+                title=title,
+                authors=authors,
+                abstract=abstract,
+                published_date=published,
+                categories=categories,
+                pdf_url=pdf_url,
+            )
+        except Exception as e:
+            logger.error(f"Failed to parse entry: {e}")
+            return None
+
+    def _get_text(
+        self, element: ET.Element, path: str, clean_newlines: bool = False
+    ) -> str:
+        elem = element.find(path, self.namespaces)
+        if elem is None or elem.text is None:
+            return ""
+
+        text = elem.text.strip()
+        return text.replace("\n", " ") if clean_newlines else text
+
+    def _get_arxiv_id(self, entry: ET.Element) -> Optional[str]:
+        id_elem = entry.find("atom:id", self.namespaces)
+        if id_elem is None or id_elem.text is None:
+            return None
+        return id_elem.text.split("/")[-1]
+
+    def _get_authors(self, entry: ET.Element) -> List[str]:
+        authors = []
+        for author in entry.findall("atom:author", self.namespaces):
+            name = self._get_text(author, "atom:name")
+            if name:
+                authors.append(author)
+        return authors
+
+    def _get_categories(self, entry: ET.Element) -> List[str]:
+        categories = []
+        for category in entry.findall("atom:category", self.namespaces):
+            term = category.get("term")
+            if term:
+                categories.append(term)
+        return categories
+
+    def _get_pdf_url(self, entry: ET.Element) -> str:
+        for link in entry.findall("atom:link", self.namespaces):
+            if link.get("type") == "application/pdf":
+                url = link.get("href", "")
+                # Convert HTTP to HTTPS for arXiv URLs
+                if url.startswith("http://arxiv.org/"):
+                    url = url.replace("http://arxiv.org/", "https://arxiv.org/")
+                return url
+        return ""
