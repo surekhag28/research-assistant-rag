@@ -46,6 +46,23 @@ class OllamaSettings(DefaultSettings):
         env_prefix = "OLLAMA_"
 
 
+class ArxivSettings(DefaultSettings):
+    base_url: str = "https://export.arxiv.org/api/query"
+    namespaces: dict = Field(
+        default={
+            "atom": "http://www.w3.org/2005/Atom",
+            "opensearch": "http://a9.com/-/spec/opensearch/1.1/",
+            "arxiv": "http://arxiv.org/schemas/atom",
+        }
+    )
+
+    pdf_cache_dir: str = "./data/arxiv_pdfs"
+    rate_limit_delay: float = 3.0
+    timeout_seconds: int = 30
+    max_results: int = 100
+    search_category: str = "cs.AI"
+
+
 class AppSettings(DefaultSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -55,6 +72,7 @@ class AppSettings(DefaultSettings):
     postgres: PostgresSettings = PostgresSettings()
     opensearch: OpenSearchSettings = OpenSearchSettings()
     ollama: OllamaSettings = OllamaSettings()
+    arxiv: ArxivSettings = ArxivSettings()
 
 
 # factory to return settings object
