@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import time
-from functools import cached_property
 import xml.etree.ElementTree as ET
+from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlencode
@@ -12,7 +12,6 @@ from src.config import ArxivSettings
 from src.exceptions import (
     ArxivAPIException,
     ArxivAPITimeoutError,
-    ArxivAPIRateLimitError,
     ArxivParseError,
     PDFDownloadException,
     PDFDownloadTimeoutError,
@@ -23,14 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 class ArxivClient:
-    """Client for fetching papers from arxiv API."""
+    """Client for fetching papers from arXiv API."""
 
-    def __int__(self, settings: ArxivSettings):
+    def __init__(self, settings: ArxivSettings):
         self._settings = settings
         self._last_request_time: Optional[float] = None
 
     @cached_property
     def pdf_cache_dir(self) -> Path:
+        """PDF cache directory with lazy creation."""
         cache_dir = Path(self._settings.pdf_cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir
@@ -68,16 +68,33 @@ class ArxivClient:
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
     ) -> List[ArxivPaper]:
+        """
+        Fetch papers from arXiv for the configured category.
 
+        Args:
+            max_results: Maximum number of papers to fetch (uses settings default if None)
+            start: Starting index for pagination
+            sort_by: Sort criteria (submittedDate, lastUpdatedDate, relevance)
+            sort_order: Sort order (ascending, descending)
+            from_date: Filter papers submitted after this date (format: YYYYMMDD)
+            to_date: Filter papers submitted before this date (format: YYYYMMDD)
+
+        Returns:
+            List of ArxivPaper objects for the configured category
+        """
         if max_results is None:
             max_results = self.max_results
 
+        # Build search query
         search_query = f"cat:{self.search_category}"
 
+        # Add date filtering if provided
         if from_date or to_date:
+            # Convert dates to arXiv format (YYYYMMDDHHMM) - use 0000 for start of day, 2359 for end
             date_from = f"{from_date}0000" if from_date else "*"
             date_to = f"{to_date}2359" if to_date else "*"
-            search_query += f" AND submittedDate: [{date_from}+TO+{date_to}]"
+            # Use correct arXiv API syntax with + symbols
+            search_query += f" AND submittedDate:[{date_from}+TO+{date_to}]"
 
         params = {
             "search_query": search_query,
@@ -86,14 +103,16 @@ class ArxivClient:
             "sortBy": sort_by,
             "sortOrder": sort_order,
         }
-        safe = ":+[]"
-        url = f"{self.base_url}?{urlencode(params,quote_via=quote,safe=safe)}"
+
+        safe = ":+[]"  # Don't encode :, +, [, ] characters needed for arXiv queries
+        url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
 
         try:
             logger.info(
-                f"Fetching {max_results} {self.search_category} papers from arxiv"
+                f"Fetching {max_results} {self.search_category} papers from arXiv"
             )
 
+            # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
             if self._last_request_time is not None:
                 time_since_last = time.time() - self._last_request_time
                 if time_since_last < self.rate_limit_delay:
@@ -111,15 +130,18 @@ class ArxivClient:
             logger.info(f"Fetched {len(papers)} papers")
 
             return papers
+
         except httpx.TimeoutException as e:
-            logger.error(f"arxiv API timeout: {e}")
-            raise ArxivAPITimeoutError(f"arxiv API request timed out: {e}")
+            logger.error(f"arXiv API timeout: {e}")
+            raise ArxivAPITimeoutError(f"arXiv API request timed out: {e}")
         except httpx.HTTPStatusError as e:
-            logger.error(f"arxiv API HTTP error: {e}")
-            raise ArxivAPIException(f"arxiv API returned error: {e}")
+            logger.error(f"arXiv API HTTP error: {e}")
+            raise ArxivAPIException(
+                f"arXiv API returned error {e.response.status_code}: {e}"
+            )
         except Exception as e:
-            logger.error(f"Failed to fetch papers and metadata from arxiv: {e}")
-            raise ArxivAPIException(f"Unexpected error fetching papers from arxiv: {e}")
+            logger.error(f"Failed to fetch papers from arXiv: {e}")
+            raise ArxivAPIException(f"Unexpected error fetching papers from arXiv: {e}")
 
     async def fetch_papers_with_query(
         self,
@@ -129,7 +151,29 @@ class ArxivClient:
         sort_by: str = "submittedDate",
         sort_order: str = "descending",
     ) -> List[ArxivPaper]:
+        """
+        Fetch papers from arXiv using a custom search query.
 
+        Args:
+            search_query: Custom arXiv search query (e.g., "cat:cs.AI AND submittedDate:[20240101 TO 20241231]")
+            max_results: Maximum number of papers to fetch (uses settings default if None)
+            start: Starting index for pagination
+            sort_by: Sort criteria (submittedDate, lastUpdatedDate, relevance)
+            sort_order: Sort order (ascending, descending)
+
+        Returns:
+            List of ArxivPaper objects matching the search query
+
+        Examples:
+            # Papers from last 30 days
+            "cat:cs.AI AND submittedDate:[20240101 TO *]"
+
+            # Papers by specific author
+            "au:LeCun AND cat:cs.AI"
+
+            # Papers with specific keywords in title
+            "ti:transformer AND cat:cs.AI"
+        """
         if max_results is None:
             max_results = self.max_results
 
@@ -141,10 +185,13 @@ class ArxivClient:
             "sortOrder": sort_order,
         }
 
-        safe = ":+[]*"
-        url = f"{self.base_url}?{urlencode(params,quote_via=quote,safe=safe)}"
+        safe = (
+            ":+[]*"  # Don't encode :, +, [, ], *, characters needed for arXiv queries
+        )
+        url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
 
         try:
+            # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
             if self._last_request_time is not None:
                 time_since_last = time.time() - self._last_request_time
                 if time_since_last < self.rate_limit_delay:
@@ -162,68 +209,109 @@ class ArxivClient:
             logger.info(f"Query returned {len(papers)} papers")
 
             return papers
+
         except httpx.TimeoutException as e:
-            logger.error(f"arxiv API timeout: {e}")
-            raise ArxivAPITimeoutError(f"arxiv API request timed out: {e}")
+            logger.error(f"arXiv API timeout: {e}")
+            raise ArxivAPITimeoutError(f"arXiv API request timed out: {e}")
         except httpx.HTTPStatusError as e:
-            logger.error(f"arxiv API HTTP error: {e}")
-            raise ArxivAPIException(f"arxiv API returned error: {e}")
+            logger.error(f"arXiv API HTTP error: {e}")
+            raise ArxivAPIException(
+                f"arXiv API returned error {e.response.status_code}: {e}"
+            )
         except Exception as e:
-            logger.error(f"Failed to fetch papers and metadata from arxiv: {e}")
-            raise ArxivAPIException(f"Unexpected error fetching papers from arxiv: {e}")
+            logger.error(f"Failed to fetch papers from arXiv: {e}")
+            raise ArxivAPIException(f"Unexpected error fetching papers from arXiv: {e}")
 
     async def fetch_paper_by_id(self, arxiv_id: str) -> Optional[ArxivPaper]:
+        """
+        Fetch a specific paper by its arXiv ID.
 
-        # remove version from arxiv id for search
+        Args:
+            arxiv_id: arXiv paper ID (e.g., "2507.17748v1" or "2507.17748")
+
+        Returns:
+            ArxivPaper object or None if not found
+        """
+        # Clean the arXiv ID (remove version if needed for search)
         clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
         params = {"id_list": clean_id, "max_results": 1}
 
-        safe = ":+[]*"
-        url = f"{self.base_url}?{urlencode(params,quote_via=quote,safe=safe)}"
+        safe = (
+            ":+[]*"  # Don't encode :, +, [, ], *, characters needed for arXiv queries
+        )
+        url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            async with httpx.AsyncClient() as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 xml_data = response.text
 
             papers = self._parse_response(xml_data)
-            logger.info(f"Query returned {len(papers)} papers")
 
-            return papers
+            if papers:
+                return papers[0]
+            else:
+                logger.warning(f"Paper {arxiv_id} not found")
+                return None
+
         except httpx.TimeoutException as e:
-            logger.error(f"arxiv API timeout: {e}")
-            raise ArxivAPITimeoutError(f"arxiv API request timed out: {e}")
+            logger.error(f"arXiv API timeout for paper {arxiv_id}: {e}")
+            raise ArxivAPITimeoutError(
+                f"arXiv API request timed out for paper {arxiv_id}: {e}"
+            )
         except httpx.HTTPStatusError as e:
-            logger.error(f"arxiv API HTTP error: {e}")
-            raise ArxivAPIException(f"arxiv API returned error: {e}")
+            logger.error(f"arXiv API HTTP error for paper {arxiv_id}: {e}")
+            raise ArxivAPIException(
+                f"arXiv API returned error {e.response.status_code} for paper {arxiv_id}: {e}"
+            )
         except Exception as e:
-            logger.error(f"Failed to fetch papers and metadata from arxiv: {e}")
-            raise ArxivAPIException(f"Unexpected error fetching papers from arxiv: {e}")
+            logger.error(f"Failed to fetch paper {arxiv_id} from arXiv: {e}")
+            raise ArxivAPIException(
+                f"Unexpected error fetching paper {arxiv_id} from arXiv: {e}"
+            )
 
     def _parse_response(self, xml_data: str) -> List[ArxivPaper]:
+        """
+        Parse arXiv API XML response into ArxivPaper objects.
 
+        Args:
+            xml_data: Raw XML response from arXiv API
+
+        Returns:
+            List of parsed ArxivPaper objects
+        """
         try:
             root = ET.fromstring(xml_data)
             entries = root.findall("atom:entry", self.namespaces)
-            papers = []
 
+            papers = []
             for entry in entries:
                 paper = self._parse_single_entry(entry)
                 if paper:
                     papers.append(paper)
+
             return papers
 
         except ET.ParseError as e:
-            logger.error(f"Failed to parse arxiv XML response: {e}")
-            raise ArxivParseError(f"Failed to parse arxiv XML response: {e}")
+            logger.error(f"Failed to parse arXiv XML response: {e}")
+            raise ArxivParseError(f"Failed to parse arXiv XML response: {e}")
         except Exception as e:
-            logger.error(f"Unexpected error parsing arxiv response: {e}")
-            raise ArxivParseError(f"Unexpected error parsing arxiv response: {e}")
+            logger.error(f"Unexpected error parsing arXiv response: {e}")
+            raise ArxivParseError(f"Unexpected error parsing arXiv response: {e}")
 
     def _parse_single_entry(self, entry: ET.Element) -> Optional[ArxivPaper]:
+        """
+        Parse a single entry from arXiv XML response.
 
+        Args:
+            entry: XML entry element
+
+        Returns:
+            ArxivPaper object or None if parsing fails
+        """
         try:
+            # Extract basic metadata
             arxiv_id = self._get_arxiv_id(entry)
             if not arxiv_id:
                 return None
@@ -244,6 +332,7 @@ class ArxivClient:
                 categories=categories,
                 pdf_url=pdf_url,
             )
+
         except Exception as e:
             logger.error(f"Failed to parse entry: {e}")
             return None
@@ -251,6 +340,17 @@ class ArxivClient:
     def _get_text(
         self, element: ET.Element, path: str, clean_newlines: bool = False
     ) -> str:
+        """
+        Extract text from XML element safely.
+
+        Args:
+            element: Parent XML element
+            path: XPath to find the text element
+            clean_newlines: Whether to replace newlines with spaces
+
+        Returns:
+            Extracted text or empty string
+        """
         elem = element.find(path, self.namespaces)
         if elem is None or elem.text is None:
             return ""
@@ -259,20 +359,47 @@ class ArxivClient:
         return text.replace("\n", " ") if clean_newlines else text
 
     def _get_arxiv_id(self, entry: ET.Element) -> Optional[str]:
+        """
+        Extract arXiv ID from entry.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            arXiv ID or None
+        """
         id_elem = entry.find("atom:id", self.namespaces)
         if id_elem is None or id_elem.text is None:
             return None
         return id_elem.text.split("/")[-1]
 
     def _get_authors(self, entry: ET.Element) -> List[str]:
+        """
+        Extract author names from entry.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            List of author names
+        """
         authors = []
         for author in entry.findall("atom:author", self.namespaces):
             name = self._get_text(author, "atom:name")
             if name:
-                authors.append(author)
+                authors.append(name)
         return authors
 
     def _get_categories(self, entry: ET.Element) -> List[str]:
+        """
+        Extract categories from entry.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            List of category terms
+        """
         categories = []
         for category in entry.findall("atom:category", self.namespaces):
             term = category.get("term")
@@ -281,6 +408,15 @@ class ArxivClient:
         return categories
 
     def _get_pdf_url(self, entry: ET.Element) -> str:
+        """
+        Extract PDF URL from entry links.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            PDF URL or empty string (always HTTPS)
+        """
         for link in entry.findall("atom:link", self.namespaces):
             if link.get("type") == "application/pdf":
                 url = link.get("href", "")
@@ -293,31 +429,63 @@ class ArxivClient:
     async def download_pdf(
         self, paper: ArxivPaper, force_download: bool = False
     ) -> Optional[Path]:
-        """ "Download PDF for a paper to local cache"""
+        """
+        Download PDF for a given paper to local cache.
 
+        Args:
+            paper: ArxivPaper object containing PDF URL
+            force_download: Force re-download even if file exists
+
+        Returns:
+            Path to downloaded PDF file or None if download failed
+        """
         if not paper.pdf_url:
             logger.error(f"No PDF URL for paper {paper.arxiv_id}")
             return None
 
-        safe_filename = paper.arxiv_id.replace("/", "_") + ".pdf"
-        pdf_path = self.pdf_cache_dir / safe_filename
+        pdf_path = self._get_pdf_path(paper.arxiv_id)
 
+        # Return cached PDF if exists
         if pdf_path.exists() and not force_download:
-            logger.info(f"Using cached PDF : {pdf_path.name}")
+            logger.info(f"Using cached PDF: {pdf_path.name}")
             return pdf_path
 
-        # else download with retry
+        # Download with retry
         if await self._download_with_retry(paper.pdf_url, pdf_path):
-            return pdf_path  # local cache path
+            return pdf_path
         else:
             return None
+
+    def _get_pdf_path(self, arxiv_id: str) -> Path:
+        """
+        Get the local path for a PDF file.
+
+        Args:
+            arxiv_id: arXiv paper ID
+
+        Returns:
+            Path object for the PDF file
+        """
+        safe_filename = arxiv_id.replace("/", "_") + ".pdf"
+        return self.pdf_cache_dir / safe_filename
 
     async def _download_with_retry(
         self, url: str, path: Path, max_retries: int = 3
     ) -> bool:
+        """
+        Download a file with retry logic.
 
+        Args:
+            url: URL to download from
+            path: Path to save the file
+            max_retries: Maximum number of retry attempts
+
+        Returns:
+            True if successful, False otherwise
+        """
         logger.info(f"Downloading PDF from {url}")
 
+        # Respect rate limits
         await asyncio.sleep(self.rate_limit_delay)
 
         for attempt in range(max_retries):
@@ -330,10 +498,10 @@ class ArxivClient:
                                 f.write(chunk)
                 logger.info(f"Successfully downloaded to {path.name}")
                 return True
+
             except httpx.TimeoutException as e:
                 if attempt < max_retries - 1:
                     wait_time = 5 * (attempt + 1)
-
                     logger.warning(
                         f"PDF download timeout (attempt {attempt + 1}/{max_retries}): {e}"
                     )
@@ -341,33 +509,29 @@ class ArxivClient:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(
-                        f"PDF download failed after {max_retries} attempt due to timeout : {e}"
+                        f"PDF download failed after {max_retries} attempts due to timeout: {e}"
                     )
                     raise PDFDownloadTimeoutError(
-                        f"PDF download timed out after {max_retries} attempt : {e}"
+                        f"PDF download timed out after {max_retries} attempts: {e}"
                     )
             except httpx.HTTPError as e:
                 if attempt < max_retries - 1:
-                    wait_time = 5 * (attempt + 1)
-
+                    wait_time = 5 * (attempt + 1)  # Exponential backoff
                     logger.warning(
                         f"Download failed (attempt {attempt + 1}/{max_retries}): {e}"
                     )
                     logger.info(f"Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.error(
-                        f"Failed after {max_retries} attempt due to timeout : {e}"
-                    )
-                    raise PDFDownloadTimeoutError(
-                        f"PDF download failed out after {max_retries} attempt : {e}"
+                    logger.error(f"Failed after {max_retries} attempts: {e}")
+                    raise PDFDownloadException(
+                        f"PDF download failed after {max_retries} attempts: {e}"
                     )
             except Exception as e:
                 logger.error(f"Unexpected download error: {e}")
-                raise PDFDownloadException(
-                    f"Unexpected error during PDF download : {e}"
-                )
+                raise PDFDownloadException(f"Unexpected error during PDF download: {e}")
 
+        # Clean up partial download
         if path.exists():
             path.unlink()
 
