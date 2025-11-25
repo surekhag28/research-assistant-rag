@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import pypdfimu2 as pdfium
+import pypdfium2 as pdfium
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption

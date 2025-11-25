@@ -63,6 +63,13 @@ class ArxivSettings(DefaultSettings):
     search_category: str = "cs.AI"
 
 
+class PDFParserSettings(DefaultSettings):
+    max_pages: int = 30
+    max_file_size_mb: int = 20
+    do_ocr: bool = False
+    do_table_structure: bool = True
+
+
 class AppSettings(DefaultSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -73,6 +80,7 @@ class AppSettings(DefaultSettings):
     opensearch: OpenSearchSettings = OpenSearchSettings()
     ollama: OllamaSettings = OllamaSettings()
     arxiv: ArxivSettings = ArxivSettings()
+    pdf_parser: PDFParserSettings = PDFParserSettings()
 
 
 # factory to return settings object
