@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     app.state.settings = settings
 
-    database = make_database(settings.postgres)
+    database = make_database()
     app.state.database = database
     logger.info("Database connected")
 

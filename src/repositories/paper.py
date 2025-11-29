@@ -103,13 +103,13 @@ class PaperRepository:
     def update(self, paper: Paper) -> Paper:
         self.session.add(paper)
         self.session.commit()
-        self.sessio.refresh(paper)
+        self.session.refresh(paper)
         return paper
 
     def upsert(self, paper_create: PaperCreate) -> Paper:
-        existing_paper = self.get_by_arxiv_id(Paper.arxiv_id)
+        existing_paper = self.get_by_arxiv_id(paper_create.arxiv_id)
         if existing_paper:
-            for key, value in paper_create.model_dump(exclude_unset=True):
+            for key, value in paper_create.model_dump(exclude_unset=True).items():
                 setattr(existing_paper, key, value)
             return self.update(existing_paper)
         else:

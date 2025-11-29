@@ -53,7 +53,7 @@ class MetadataFetcher:
 
         results = {
             "papers_fetched": 0,
-            "pdfs_download": 0,
+            "pdfs_downloaded": 0,
             "pdfs_parsed": 0,
             "errors": [],
             "processing_time": 0,
@@ -88,7 +88,7 @@ class MetadataFetcher:
             # store to database if required
             if store_to_db and db_session:
                 logger.info("Storing papers to database")
-                stored_count = self._store_papers_to_db(papers, pdf_results)
+                stored_count = self._store_papers_to_db(papers, pdf_results, db_session)
                 results["papers_stored"] = stored_count
             elif store_to_db:
                 logger.warning("Database storage requested but no session provided")
@@ -306,7 +306,7 @@ class MetadataFetcher:
 
                 if parsed_paper:
                     parsed_content = self._serialize_parsed_content(parsed_paper)
-                    paper_date.update(parsed_content)
+                    paper_data.update(parsed_content)
                     logger.debug(
                         f"Storing paper {paper.arxiv_id} with parsed_content ({len(parsed_content.get('raw_text','')) if parsed_content.get('raw_text') else 0} chars)"
                     )

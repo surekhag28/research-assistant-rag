@@ -22,6 +22,8 @@ class PostgreSQLDatabase(BaseDatabase):
         self.session_factory: Optional[sessionmaker] = None
 
     def startup(self) -> None:
+        print(self.config.database_url)
+        print(self.config.pool_size)
         try:
             logger.info(
                 f"Attempting to connect to PostgreSQL at: {self.config.database_url.split('@')[1] if '@' in self.config.database_url else 'localhost'}"
