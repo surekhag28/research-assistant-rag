@@ -78,12 +78,12 @@ def fetch_daily_papers(**context):
         execution_dt = datetime.strptime(execution_date, "%Y-%m-%d")
         target_date = execution_dt - timedelta(1)
         target_date = target_date.strftime("%Y%m%d")
-
+        # target_date = "20250127" #for testing purposes
         logger.info(f"Fetching papers for date: {target_date}")
 
         results = asyncio.run(
             run_paper_ingestion_pipeline(
-                target_date=target_date, max_results=10, process_pdfs=True
+                target_date=target_date, max_results=20, process_pdfs=True
             )
         )
 
@@ -123,6 +123,38 @@ def process_failed_pdfs(**context):
         }
     except Exception as e:
         error_msg = f"Failed PDF processing error: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+
+
+def create_opensearch_placeholders(**context):
+
+    logger.info("Creating OpenSearch placeholders")
+
+    try:
+        fetch_results = context["task_instance"].xcom_pull(
+            task_ids="fetch_daily_papers", key="fetch_results"
+        )
+
+        if not fetch_results:
+            logger.info("No fetched results available for OpenSearch placeholders")
+            return {"status": "skipped", "message": "No papers to process"}
+
+        papers_stored = fetch_results.get("papers_stored", 0)
+        logger.info(f"Creating placeholders for {papers_stored} papers")
+
+        placeholder_results = {
+            "status": "placeholder",
+            "papers_ready_for_indexing": papers_stored,
+            "message": f"{papers_stored} papers ready for future OpenSearch indexing",
+        }
+
+        logger.info(f"OpenSearch placeholders: {placeholder_results}")
+
+        return placeholder_results
+
+    except Exception as e:
+        error_msg = f"OpenSearch placeholder creation failed: {str(e)}"
         logger.error(error_msg)
         raise Exception(error_msg)
 

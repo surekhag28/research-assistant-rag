@@ -206,6 +206,7 @@ class MetadataFetcher:
             async with download_semaphore:
                 logger.debug(f"Starting download: {paper.arxiv_id}")
                 pdf_path = await self.arxiv_client.download_pdf(paper, False)
+                logger.info(f"PDF path for {paper.arxiv_id}: {pdf_path}")
 
                 if pdf_path:
                     download_success = True
@@ -287,7 +288,7 @@ class MetadataFetcher:
 
         for paper in papers:
             try:
-                parsed_paper = parsed_papers.get(paper.arxiv_id)
+                parsed_paper = parsed_papers.get("parsed_papers").get(paper.arxiv_id)
                 published_date = (
                     date_parser.parse(paper.published_date)
                     if isinstance(paper.published_date, str)

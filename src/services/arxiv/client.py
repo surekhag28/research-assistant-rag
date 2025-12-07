@@ -444,6 +444,7 @@ class ArxivClient:
             return None
 
         pdf_path = self._get_pdf_path(paper.arxiv_id)
+        logger.info(f"Downloaded pdf path for paper: {paper.arxiv_id}: {pdf_path}")
 
         # Return cached PDF if exists
         if pdf_path.exists() and not force_download:

@@ -42,7 +42,7 @@ class PaperCreate(PaperBase):
     parser_used: Optional[str] = Field(
         None, description="Which parser was used (DOCLING, GORBID etc.)"
     )
-    parser_metdata: Optional[Dict[str, Any]] = Field(
+    parser_metadata: Optional[Dict[str, Any]] = Field(
         None, description="Additional parser metadata"
     )
     pdf_processed: Optional[bool] = Field(
