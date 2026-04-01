@@ -23,10 +23,17 @@ class PostgresSettings(DefaultSettings):
 
 
 class OpenSearchSettings(DefaultSettings):
-    host: str = "http://localhost:9200"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="OPENSEARCH__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
 
-    class Config:
-        env_prefix = "OPENSEARCH_"
+    host: str = "http://localhost:9200"
+    index_name: str = "arxiv-papers"
+    max_text_size: int = 1000000
 
 
 class OllamaSettings(DefaultSettings):
@@ -61,6 +68,16 @@ class ArxivSettings(DefaultSettings):
     timeout_seconds: int = 30
     max_results: int = 100
     search_category: str = "cs.AI"
+    download_max_retries: int = 3
+    download_retry_delay_base: int = 5
+    max_concurrent_downloads: int = 5
+    max_concurrent_parsing: int = 1
+
+    @field_validator("pdf_cache_dir")
+    @classmethod
+    def validate_cache_dir(cls, v: str) -> str:
+        os.makedirs(v, exist_ok=True)
+        return v
 
 
 class PDFParserSettings(DefaultSettings):
@@ -70,19 +87,19 @@ class PDFParserSettings(DefaultSettings):
     do_table_structure: bool = True
 
 
-class AppSettings(DefaultSettings):
+class Settings(DefaultSettings):
     app_version: str = "0.1.0"
     debug: bool = True
     environment: str = "development"
     service_name: str = "rag-api"
 
-    postgres: PostgresSettings = PostgresSettings()
-    opensearch: OpenSearchSettings = OpenSearchSettings()
-    ollama: OllamaSettings = OllamaSettings()
-    arxiv: ArxivSettings = ArxivSettings()
-    pdf_parser: PDFParserSettings = PDFParserSettings()
+    postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
+    pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
 
 
 # factory to return settings object
-def get_settings() -> AppSettings:
-    return AppSettings()
+def get_settings() -> Settings:
+    return Settings()

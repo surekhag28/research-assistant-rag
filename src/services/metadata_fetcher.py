@@ -6,12 +6,15 @@ from typing import Any, Dict, List, Optional
 
 from dateutil import parser as date_parser
 from sqlalchemy.orm import Session
+from src.config import Settings
 from src.exceptions import MetadataFetchingException, PipelineException
 from src.repositories.paper import PaperRepository
 from src.schemas.arxiv.paper import ArxivPaper, PaperCreate
 from src.schemas.pdf_parser.models import ArxivMetadata, ParsedPaper, PdfContent
 from src.services.arxiv.client import ArxivClient
 from src.services.pdf_parser.parser import PDFParserService
+from src.services.opensearch.client import OpenSearchClient
+from src.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +33,20 @@ class MetadataFetcher:
         self,
         arxiv_client: ArxivClient,
         pdf_parser: PDFParserService,
+        opensearch_client: Optional[OpenSearchClient],
         pdf_cache_dir: Optional[Path],
         max_concurrent_downloads: int = 5,
         max_concurrent_parsing: int = 3,
+        settings: Optional[Settings] = None,
     ) -> None:
 
         self.arxiv_client = arxiv_client
         self.pdf_parser = pdf_parser
+        self.opensearch_client = opensearch_client
         self.pdf_cache_dir = pdf_cache_dir
         self.max_concurrent_downloads = max_concurrent_downloads
         self.max_concurrent_parsing = max_concurrent_parsing
+        self.settings = settings or get_settings()
 
     async def fetch_and_process_papers(
         self,
@@ -49,12 +56,15 @@ class MetadataFetcher:
         process_pdfs: bool = True,
         store_to_db: bool = True,
         db_session: Optional[Session] = None,
+        index_to_opensearch: bool = False,
     ) -> Dict[str, Any]:
 
         results = {
             "papers_fetched": 0,
             "pdfs_downloaded": 0,
             "pdfs_parsed": 0,
+            "papers_stored": 0,
+            "papers_indexed": 0,
             "errors": [],
             "processing_time": 0,
         }
@@ -349,17 +359,87 @@ class MetadataFetcher:
 
         return stored_count
 
+    def _index_papers_to_opensearch(
+        self, papers: List[ArxivPaper], parsed_papers: Dict[str, ParsedPaper]
+    ) -> int:
+        """
+        Index papers to OpenSearch for full-text search.
+
+        Args:
+            papers: List of ArxivPapers metadata
+            parsed_papers: Dictionary of parsed PDF content by arxiv_id
+
+        Returns:
+            Number of papers successfully indexed.
+        """
+
+        indexed_count = 0
+
+        for paper in papers:
+            try:
+                parsed_paper = parsed_papers.get(paper.arxiv_id)
+
+                opensearch_data = {
+                    "arxiv_id": paper.arxiv_id,
+                    "title": paper.title,
+                    "authors": (
+                        paper.authors
+                        if isinstance(paper.authors, str)
+                        else ", ".join(paper.authors)
+                    ),
+                    "abstract": paper.abstract,
+                    "categories": paper.categories,
+                    "pdf_url": paper.pdf_url,
+                    "published_date": (
+                        paper.published_date.isoformat()
+                        if hasattr(paper.published_date, "isoformat")
+                        else str(paper.published_date)
+                    ),
+                }
+
+                if parsed_paper and parsed_paper.pdf_content:
+                    max_text_size = self.settings.opensearch.max_text_size
+                    opensearch_data["raw_text"] = parsed_paper.pdf_content.raw_text[
+                        :max_text_size
+                    ]
+                else:
+                    opensearch_data["raw_text"] = ""
+
+                if self.opensearch_client.index_paper(opensearch_data):
+                    indexed_count += 1
+                    logger.debug(f"Indexed paper {paper.arxiv_id} to OpenSearch")
+                else:
+                    logger.warning(f"Failed to inex paper {paper.arxiv_id}")
+            except Exception as e:
+                logger.error(
+                    f"Error indexing paper {paper.arxiv_id} to OpenSearch: {e}"
+                )
+
+        logger.info(f"Indexed {indexed_count}/{len(papers)} papers to OpenSearch")
+        return indexed_count
+
 
 def make_metadata_fetcher(
     arxiv_client: ArxivClient,
     pdf_parser: PDFParserService,
+    opensearch_client: Optional[OpenSearchClient] = None,
     pdf_cache_dir: Optional[Path] = None,
+    settings: Optional[Settings] = None,
 ) -> MetadataFetcher:
+
+    from src.config import get_settings
+
+    if settings is None:
+        settings = get_settings()
+
+    logger.info(settings)
 
     return MetadataFetcher(
         arxiv_client=arxiv_client,
         pdf_parser=pdf_parser,
+        opensearch_client=opensearch_client,
         pdf_cache_dir=pdf_cache_dir,
-        max_concurrent_downloads=5,
-        max_concurrent_parsing=1,
+        max_concurrent_downloads=settings.arxiv.max_concurrent_downloads,
+        max_concurrent_parsing=settings.arxiv.max_concurrent_parsing,
+        settings=settings,
     )

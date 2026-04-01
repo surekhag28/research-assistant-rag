@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
-from src.config import get_settings, AppSettings
+from src.config import get_settings, Settings
 from src.db.factory import make_database
 from src.routers import ping
 

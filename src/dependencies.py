@@ -2,7 +2,7 @@ from typing import Annotated, Generator
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 from src.db.interface import BaseDatabase
-from src.config import AppSettings
+from src.config import Settings
 
 
 def get_request_settings(request: Request) -> AppSettings:
@@ -20,6 +20,6 @@ def get_db_session(
         yield session
 
 
-SettingsDep = Annotated[AppSettings, Depends(get_request_settings)]
+SettingsDep = Annotated[Settings, Depends(get_request_settings)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
