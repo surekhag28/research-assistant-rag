@@ -1,17 +1,26 @@
-class ArxivAPIException(Exception):
-    """Base exception for arxiv API-related errors."""
+class RepositoryException(Exception):
+    """Base exception for repository-related errors."""
 
 
-class ArxivAPITimeoutError(ArxivAPIException):
-    """Exception raised when API request times out."""
+class PaperNotFound(RepositoryException):
+    """Exception raised when paper data is not found."""
 
 
-class ArxivAPIRateLimitError(ArxivAPIException):
-    """Exception raised when arxiv API rate limit exceeds."""
+class PaperNotSaved(RepositoryException):
+    """Exception raised when paper data is not saved."""
 
 
-class ArxivParseError(ArxivAPIException):
-    """Exception raised when arxiv API response parsing fails."""
+class ParsingException(Exception):
+    """Base exception for parsing-related errors."""
+
+
+# Week 2: PDF parsing exceptions (implemented)
+class PDFParsingException(ParsingException):
+    """Base exception for PDF parsing-related errors."""
+
+
+class PDFValidationError(PDFParsingException):
+    """Exception raised when PDF file validation fails."""
 
 
 class PDFDownloadException(Exception):
@@ -22,25 +31,57 @@ class PDFDownloadTimeoutError(PDFDownloadException):
     """Exception raised when PDF download times out."""
 
 
-class ParsingException(Exception):
-    """Base exception for parsing-related errors"""
+class PDFCacheException(Exception):
+    """Exception raised for PDF cache-related errors."""
 
 
-class PDFParsingException(ParsingException):
-    """Base exception for PDF parsing-related errors"""
+# Week 3+: OpenSearch exceptions (placeholders for Week 1)
+class OpenSearchException(Exception):
+    """Base exception for OpenSearch-related errors."""
 
 
-class PDFValidationError(PDFParsingException):
-    """Exception raised when PDF file validation fails."""
+# Week 2+: ArXiv API exceptions
+class ArxivAPIException(Exception):
+    """Base exception for arXiv API-related errors."""
 
 
+class ArxivAPITimeoutError(ArxivAPIException):
+    """Exception raised when arXiv API request times out."""
+
+
+class ArxivAPIRateLimitError(ArxivAPIException):
+    """Exception raised when arXiv API rate limit is exceeded."""
+
+
+class ArxivParseError(ArxivAPIException):
+    """Exception raised when arXiv API response parsing fails."""
+
+
+# Week 2+: Metadata fetching exceptions
 class MetadataFetchingException(Exception):
-    """Base exception for metadata fetching pipeline errors"""
+    """Base exception for metadata fetching pipeline errors."""
 
 
 class PipelineException(MetadataFetchingException):
-    """Exception raised during pipeline execution"""
+    """Exception raised during pipeline execution."""
 
 
 class LLMException(Exception):
-    """Base exception for LLM-related errors"""
+    """Base exception for LLM-related errors."""
+
+
+class OllamaException(LLMException):
+    """Exception raised for Ollama service errors."""
+
+
+class OllamaConnectionError(OllamaException):
+    """Exception raised when cannot connect to Ollama service."""
+
+
+class OllamaTimeoutError(OllamaException):
+    """Exception raised when Ollama service times out."""
+
+
+# General application exceptions
+class ConfigurationError(Exception):
+    """Exception raised when configuration is invalid."""

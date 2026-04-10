@@ -4,8 +4,8 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from src.models.paper import Paper  # ORM object
-from src.schemas.arxiv.paper import PaperCreate  # schema object
+from src.models.paper import Paper
+from src.schemas.arxiv.paper import PaperCreate
 
 
 class PaperRepository:
@@ -28,12 +28,7 @@ class PaperRepository:
         return self.session.scalar(stmt)
 
     def get_all(self, limit: int = 100, offset: int = 0) -> List[Paper]:
-        stmt = (
-            select(Paper)
-            .order_by(Paper.published_date.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(Paper).order_by(Paper.published_date.desc()).limit(limit).offset(offset)
         return list(self.session.scalars(stmt))
 
     def get_count(self) -> int:
@@ -41,6 +36,7 @@ class PaperRepository:
         return self.session.scalar(stmt) or 0
 
     def get_processed_papers(self, limit: int = 100, offset: int = 0) -> List[Paper]:
+        """Get papers that have been successfully processed with PDF content."""
         stmt = (
             select(Paper)
             .where(Paper.pdf_processed == True)
@@ -48,56 +44,36 @@ class PaperRepository:
             .limit(limit)
             .offset(offset)
         )
-
         return list(self.session.scalars(stmt))
 
     def get_unprocessed_papers(self, limit: int = 100, offset: int = 0) -> List[Paper]:
-        stmt = (
-            select(Paper)
-            .where(Paper.pdf_processed == False)
-            .order_by(Paper.pdf_processing_date.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        """Get papers that haven't been processed for PDF content yet."""
+        stmt = select(Paper).where(Paper.pdf_processed == False).order_by(Paper.published_date.desc()).limit(limit).offset(offset)
         return list(self.session.scalars(stmt))
 
-    def get_papers_with_raw_text(
-        self, limit: int = 100, offset: int = 0
-    ) -> List[Paper]:
-        stmt = (
-            select(Paper)
-            .where(Paper.raw_text != None)
-            .order_by(Paper.pdf_processing_date.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-        return list(stmt.session.scalars(stmt))
+    def get_papers_with_raw_text(self, limit: int = 100, offset: int = 0) -> List[Paper]:
+        """Get papers that have raw text content stored."""
+        stmt = select(Paper).where(Paper.raw_text != None).order_by(Paper.pdf_processing_date.desc()).limit(limit).offset(offset)
+        return list(self.session.scalars(stmt))
 
     def get_processing_stats(self) -> dict:
-        total_count = self.get_count()
+        """Get statistics about PDF processing status."""
+        total_papers = self.get_count()
 
-        # count processed papers
-        processed_stats = select(func.count(Paper.id)).where(
-            Paper.pdf_processed == True
-        )
-        processed_papers = self.session.scalar(processed_stats) or 0
+        # Count processed papers
+        processed_stmt = select(func.count(Paper.id)).where(Paper.pdf_processed == True)
+        processed_papers = self.session.scalar(processed_stmt) or 0
 
-        # count papers with text
+        # Count papers with text
         text_stmt = select(func.count(Paper.id)).where(Paper.raw_text != None)
         papers_with_text = self.session.scalar(text_stmt) or 0
 
         return {
-            "total_papers": total_count,
+            "total_papers": total_papers,
             "processed_papers": processed_papers,
             "papers_with_text": papers_with_text,
-            "processing_rate": (
-                (processed_papers / total_count * 100) if total_count > 0 else 0
-            ),
-            "text_extraction_rate": (
-                (papers_with_text / processed_papers * 100)
-                if processed_papers > 0
-                else 0
-            ),
+            "processing_rate": (processed_papers / total_papers * 100) if total_papers > 0 else 0,
+            "text_extraction_rate": (papers_with_text / processed_papers * 100) if processed_papers > 0 else 0,
         }
 
     def update(self, paper: Paper) -> Paper:
@@ -107,10 +83,13 @@ class PaperRepository:
         return paper
 
     def upsert(self, paper_create: PaperCreate) -> Paper:
+        # Check if paper already exists
         existing_paper = self.get_by_arxiv_id(paper_create.arxiv_id)
         if existing_paper:
+            # Update existing paper with new content
             for key, value in paper_create.model_dump(exclude_unset=True).items():
                 setattr(existing_paper, key, value)
             return self.update(existing_paper)
         else:
+            # Create new paper
             return self.create(paper_create)

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from src.db.postgresql import Base
+from src.db.interfaces.postgresql import Base
 
 
 class Paper(Base):
@@ -32,8 +32,4 @@ class Paper(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
