@@ -15,11 +15,6 @@ RUN apt-get update && \
         libpq-dev \
         poppler-utils \
         tesseract-ocr \
-        libgl1 \
-        libglib2.0-0 \
-        libsm6 \
-        libxrender1 \
-        libxext6 \
         && rm -rf /var/lib/apt/lists/*
 
 # Create airflow user with UID/GID 50000 for cross-platform compatibility
@@ -30,7 +25,6 @@ RUN mkdir -p ${AIRFLOW_HOME} && \
     mkdir -p ${AIRFLOW_HOME}/dags && \
     mkdir -p ${AIRFLOW_HOME}/logs && \
     mkdir -p ${AIRFLOW_HOME}/plugins && \
-    mkdir -p ${AIRFLOW_HOME}/data && \
     chown -R 50000:50000 ${AIRFLOW_HOME} && \
     chmod -R 755 ${AIRFLOW_HOME}
 

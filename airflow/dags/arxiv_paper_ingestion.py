@@ -4,16 +4,17 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 
+# Import task functions from separate module
 from arxiv_ingestion.tasks import (
     fetch_daily_papers,
     generate_daily_report,
-    process_failed_pdfs,
-    setup_environment,
     index_papers_to_opensearch,
+    setup_environment,
 )
 
+# Default DAG arguments
 default_args = {
-    "owner": "research_assistant",
+    "owner": "arxiv-curator",
     "depends_on_past": False,
     "start_date": datetime(2025, 8, 8),
     "email_on_failure": False,
@@ -23,23 +24,28 @@ default_args = {
     "catchup": False,
 }
 
+# Create the DAG
 dag = DAG(
     "arxiv_paper_ingestion",
     default_args=default_args,
-    description="Daily arxiv CS.AI paper ingestion and processing pipeline",
-    schedule="0 6 * * 1-5",  # Monday-Friday at 6 AM UTC (excludes weekends)
-    # schedule="20 2 * * *",  # # runs every 5 minutes including weekends
+    description="Daily arXiv CS.AI paper pipeline: fetch → store to PostgreSQL → index to OpenSearch",
+    schedule="0 6 * * 1-5",  # Monday-Friday at 6 AM UTC
     max_active_runs=1,
     catchup=False,
-    tags=["arxiv", "papers", "ingestion"],
+    tags=["arxiv", "papers", "ingestion", "opensearch", "week3"],
 )
 
+# Task definitions
 setup_task = PythonOperator(
-    task_id="setup_environment", python_callable=setup_environment, dag=dag
+    task_id="setup_environment",
+    python_callable=setup_environment,
+    dag=dag,
 )
 
 fetch_task = PythonOperator(
-    task_id="fetch_daily_papers", python_callable=fetch_daily_papers, dag=dag
+    task_id="fetch_daily_papers",
+    python_callable=fetch_daily_papers,
+    dag=dag,
 )
 
 opensearch_task = PythonOperator(
@@ -49,7 +55,9 @@ opensearch_task = PythonOperator(
 )
 
 report_task = PythonOperator(
-    task_id="generate_daily_report", python_callable=generate_daily_report, dag=dag
+    task_id="generate_daily_report",
+    python_callable=generate_daily_report,
+    dag=dag,
 )
 
 cleanup_task = BashOperator(
@@ -63,5 +71,6 @@ cleanup_task = BashOperator(
     dag=dag,
 )
 
-
+# Task dependencies
+# Main pipeline: setup -> fetch -> opensearch -> report -> cleanup
 setup_task >> fetch_task >> opensearch_task >> report_task >> cleanup_task
